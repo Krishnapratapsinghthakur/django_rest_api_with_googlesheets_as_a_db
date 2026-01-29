@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import Header from './components/Header';
 import ItemList from './components/ItemList';
 import ItemForm from './components/ItemForm';
 import DeleteConfirm from './components/DeleteConfirm';
+import LoginPage from './components/LoginPage';
 import { api } from './services/api';
 import './App.css';
 
-function App() {
+function AppContent() {
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
@@ -15,10 +18,12 @@ function App() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Fetch items on component mount
+  // Fetch items when authenticated
   useEffect(() => {
-    fetchItems();
-  }, []);
+    if (isAuthenticated) {
+      fetchItems();
+    }
+  }, [isAuthenticated]);
 
   const fetchItems = async () => {
     setLoading(true);
@@ -73,6 +78,20 @@ function App() {
     }
   };
 
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="app loading-screen">
+        <div className="loading-spinner"></div>
+      </div>
+    );
+  }
+
+  // Show login if not authenticated
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
+
   return (
     <div className="app">
       <Header onAddClick={handleAddClick} />
@@ -112,6 +131,14 @@ function App() {
         <p>Powered by Django + React + Google Sheets</p>
       </footer>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 

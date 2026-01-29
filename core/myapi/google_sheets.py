@@ -70,22 +70,41 @@ class GoogleSheetsService:
             self._sheet = spreadsheet.sheet1  # Use first sheet
         return self._sheet
     
-    def get_all_rows(self):
+    def ensure_email_column(self):
+        """
+        Ensure the email column exists in the sheet.
+        If not, add it as the 4th column.
+        """
+        headers = self.sheet.row_values(1)
+        if 'email' not in headers:
+            # Add email header in column D
+            self.sheet.update_cell(1, 4, 'email')
+    
+    def get_all_rows(self, user_email=None):
         """
         Get all rows from the sheet.
         
+        Args:
+            user_email: Optional email to filter by (for regular users).
+            
         Returns:
             list: List of dictionaries representing rows.
         """
         records = self.sheet.get_all_records()
+        
+        # Filter by email if provided
+        if user_email:
+            records = [r for r in records if r.get('email') == user_email]
+        
         return records
     
-    def get_row(self, row_id):
+    def get_row(self, row_id, user_email=None):
         """
         Get a specific row by ID.
         
         Args:
             row_id: The ID of the row to retrieve.
+            user_email: Optional email to verify ownership.
             
         Returns:
             dict: Row data or None if not found.
@@ -93,6 +112,9 @@ class GoogleSheetsService:
         records = self.sheet.get_all_records()
         for record in records:
             if record.get('id') == row_id:
+                # Check email ownership if provided
+                if user_email and record.get('email') != user_email:
+                    return None
                 return record
         return None
     
@@ -112,16 +134,20 @@ class GoogleSheetsService:
                 return idx + 2  # +2 for header row (1) and 0-indexing
         return None
     
-    def create_row(self, data):
+    def create_row(self, data, user_email=None):
         """
         Create a new row in the sheet.
         
         Args:
             data: Dictionary with 'name' and 'description' keys.
+            user_email: Email of the user creating the row.
             
         Returns:
             dict: The created row data with assigned ID.
         """
+        # Ensure email column exists
+        self.ensure_email_column()
+        
         # Get the next ID - handle empty or non-integer IDs
         records = self.sheet.get_all_records()
         ids = []
@@ -137,21 +163,23 @@ class GoogleSheetsService:
         new_row = {
             'id': next_id,
             'name': data.get('name', ''),
-            'description': data.get('description', '')
+            'description': data.get('description', ''),
+            'email': user_email or data.get('email', '')
         }
         
         # Append to sheet
-        self.sheet.append_row([new_row['id'], new_row['name'], new_row['description']])
+        self.sheet.append_row([new_row['id'], new_row['name'], new_row['description'], new_row['email']])
         
         return new_row
     
-    def update_row(self, row_id, data):
+    def update_row(self, row_id, data, user_email=None):
         """
         Update an existing row.
         
         Args:
             row_id: The ID of the row to update.
             data: Dictionary with fields to update.
+            user_email: Email to verify ownership.
             
         Returns:
             dict: Updated row data or None if not found.
@@ -165,29 +193,41 @@ class GoogleSheetsService:
         if current is None:
             return None
         
-        # Merge with updates
+        # Check ownership if email provided
+        if user_email and current.get('email') != user_email:
+            return None
+        
+        # Merge with updates (don't allow changing email)
         updated = {
             'id': row_id,
             'name': data.get('name', current.get('name', '')),
-            'description': data.get('description', current.get('description', ''))
+            'description': data.get('description', current.get('description', '')),
+            'email': current.get('email', '')  # Keep original email
         }
         
         # Update the row
-        self.sheet.update(f'A{row_number}:C{row_number}', 
-                         [[updated['id'], updated['name'], updated['description']]])
+        self.sheet.update(f'A{row_number}:D{row_number}', 
+                         [[updated['id'], updated['name'], updated['description'], updated['email']]])
         
         return updated
     
-    def delete_row(self, row_id):
+    def delete_row(self, row_id, user_email=None):
         """
         Delete a row by ID.
         
         Args:
             row_id: The ID of the row to delete.
+            user_email: Email to verify ownership.
             
         Returns:
-            bool: True if deleted, False if not found.
+            bool: True if deleted, False if not found or not authorized.
         """
+        # Check ownership first
+        if user_email:
+            current = self.get_row(row_id)
+            if current is None or current.get('email') != user_email:
+                return False
+        
         row_number = self.get_row_number(row_id)
         if row_number is None:
             return False

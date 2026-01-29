@@ -4,7 +4,7 @@ from .views import ItemViewSet
 from .sheets_views import SheetItemListCreateAPIView, SheetItemDetailAPIView
 
 router = DefaultRouter()
-router.register(r'items', ItemViewSet)
+router.register(r'items', ItemViewSet, basename='item')
 
 urlpatterns = [
     path('', include(router.urls)),
